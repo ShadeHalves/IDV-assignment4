@@ -1,3 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>IDV Assignment 4 – Robustness Results</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    margin: 30px;
+    background: #fafafa;
+  }
+  h1 { margin-bottom: 6px; }
+  p  { margin-top: 0; margin-bottom: 10px; }
+  .controls { margin-bottom: 12px; }
+  .controls span { font-weight: 600; margin-right: 8px; }
+
+  button.metric-btn, button.dataset-btn {
+    border: 1px solid #ccc;
+    background: #fff;
+    padding: 4px 10px;
+    margin-right: 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  button.metric-btn.active,
+  button.dataset-btn.active {
+    background: #3f51b5;
+    color: #fff;
+    border-color: #3f51b5;
+  }
+
+  .tooltip {
+    position: absolute;
+    padding: 6px 10px;
+    background: #fff;
+    border: 1px solid #ccc;
+    box-shadow: 0 0 4px #0002;
+    pointer-events: none;
+    font-size: 13px;
+    border-radius: 4px;
+  }
+
+  #summary {
+    margin-top: 14px;
+    font-size: 13px;
+    background: #fff;
+    border-radius: 6px;
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    max-width: 880px;
+  }
+  #summary h3 {
+    margin: 0 0 4px 0;
+    font-size: 14px;
+  }
+  #summary ul {
+    margin: 4px 0 0 16px;
+    padding: 0;
+  }
+</style>
+</head>
+
+<body>
+<h1>Adversarial Training Results – Bar Chart with D3.js</h1>
+<p>Data option 1: groups of data (Standard Accuracy, Certified Robustness Rate, Certified Robust Accuracy).</p>
+
+<div class="controls">
+  <span>Metric:</span>
+  <button class="metric-btn active" data-metric="standard">Standard Accuracy</button>
+  <button class="metric-btn" data-metric="crr">Certified Robustness Rate</button>
+  <button class="metric-btn" data-metric="cra">Certified Robust Accuracy</button>
+</div>
+
+<div class="controls">
+  <span>Dataset:</span>
+  <button class="dataset-btn active" data-dataset="CIFAR-100">CIFAR-100</button>
+  <button class="dataset-btn" data-dataset="CIFAR-10">CIFAR-10</button>
+  <button class="dataset-btn" data-dataset="SVHN">SVHN</button>
+  <button class="dataset-btn" data-dataset="MNIST">MNIST</button>
+</div>
+
+<svg id="chart" width="900" height="480"></svg>
+<div id="tooltip" class="tooltip" style="opacity:0;"></div>
+
+<div id="summary">
+  <h3>Best and worst methods for each dataset</h3>
+  <ul id="summary-list"></ul>
+</div>
+
 <script>
 // ---------------- Metric / dataset config -----------------
 const metricConfig = {
@@ -167,3 +258,7 @@ function initChart(data) {
   });
 }
 </script>
+
+
+</body>
+</html>
