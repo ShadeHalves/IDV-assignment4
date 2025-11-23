@@ -1,94 +1,3 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>IDV Assignment 4 – Robustness Results</title>
-<script src="https://d3js.org/d3.v7.min.js"></script>
-<style>
-  body {
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    margin: 30px;
-    background: #fafafa;
-  }
-  h1 { margin-bottom: 6px; }
-  p  { margin-top: 0; margin-bottom: 10px; }
-  .controls { margin-bottom: 12px; }
-  .controls span { font-weight: 600; margin-right: 8px; }
-
-  button.metric-btn, button.dataset-btn {
-    border: 1px solid #ccc;
-    background: #fff;
-    padding: 4px 10px;
-    margin-right: 6px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 13px;
-  }
-  button.metric-btn.active,
-  button.dataset-btn.active {
-    background: #3f51b5;
-    color: #fff;
-    border-color: #3f51b5;
-  }
-
-  .tooltip {
-    position: absolute;
-    padding: 6px 10px;
-    background: #fff;
-    border: 1px solid #ccc;
-    box-shadow: 0 0 4px #0002;
-    pointer-events: none;
-    font-size: 13px;
-    border-radius: 4px;
-  }
-
-  #summary {
-    margin-top: 14px;
-    font-size: 13px;
-    background: #fff;
-    border-radius: 6px;
-    padding: 10px 12px;
-    border: 1px solid #ddd;
-    max-width: 880px;
-  }
-  #summary h3 {
-    margin: 0 0 4px 0;
-    font-size: 14px;
-  }
-  #summary ul {
-    margin: 4px 0 0 16px;
-    padding: 0;
-  }
-</style>
-</head>
-
-<body>
-<h1>Adversarial Training Results – Bar Chart with D3.js</h1>
-<p>Data option 1: groups of data (Standard Accuracy, Certified Robustness Rate, Certified Robust Accuracy).</p>
-
-<div class="controls">
-  <span>Metric:</span>
-  <button class="metric-btn active" data-metric="standard">Standard Accuracy</button>
-  <button class="metric-btn" data-metric="crr">Certified Robustness Rate</button>
-  <button class="metric-btn" data-metric="cra">Certified Robust Accuracy</button>
-</div>
-
-<div class="controls">
-  <span>Dataset:</span>
-  <button class="dataset-btn active" data-dataset="CIFAR-100">CIFAR-100</button>
-  <button class="dataset-btn" data-dataset="CIFAR-10">CIFAR-10</button>
-  <button class="dataset-btn" data-dataset="SVHN">SVHN</button>
-  <button class="dataset-btn" data-dataset="MNIST">MNIST</button>
-</div>
-
-<svg id="chart" width="900" height="480"></svg>
-<div id="tooltip" class="tooltip" style="opacity:0;"></div>
-
-<div id="summary">
-  <h3>Best and worst methods for each dataset</h3>
-  <ul id="summary-list"></ul>
-</div>
-
 <script>
 // ---------------- Metric / dataset config -----------------
 const metricConfig = {
@@ -109,7 +18,7 @@ const metricConfig = {
 const datasets = ["CIFAR-100", "CIFAR-10", "SVHN", "MNIST"];
 
 let currentMetric = "standard";
-let currentDataset = "CIFAR-100";
+let currentDataset = "MNIST";   // 你现在默认选的是 MNIST，就沿用
 
 // ---------------- Load JSON data -----------------
 d3.json("data_1.json").then(initChart);
@@ -128,10 +37,10 @@ function initChart(data) {
 
   const approaches = data.map(d => d.approach);
 
-  // Same color per method
+  // 同一种方法使用同样的颜色
   const color = d3.scaleOrdinal()
       .domain(approaches)
-      .range(d3.schemeTableau10.concat(d3.schemeSet3)); 
+      .range(d3.schemeTableau10.concat(d3.schemeSet3)); // 足够颜色
 
   const x = d3.scaleBand()
       .domain(approaches)
@@ -141,39 +50,41 @@ function initChart(data) {
   const y = d3.scaleLinear()
       .range([innerHeight, 0]);
 
-  const xAxis = g.append("g")
-      .attr("transform", `translate(0,${innerHeight})`)
-      .attr("class", "x-axis")
-      .call(d3.axisBottom(x))
-      .selectAll("text")
-        .attr("transform", "rotate(-35)")
-        .style("text-anchor", "end");
+  // x 轴
+  g.append("g")
+    .attr("transform", `translate(0,${innerHeight})`)
+    .call(d3.axisBottom(x))
+    .selectAll("text")
+      .attr("transform", "rotate(-35)")
+      .style("text-anchor", "end");
 
+  // y 轴 group
   const yAxisG = g.append("g").attr("class", "y-axis");
 
+  // y 轴标题
   const yLabel = g.append("text")
       .attr("x", -innerHeight / 2)
       .attr("y", -48)
       .attr("transform", "rotate(-90)")
       .attr("text-anchor", "middle")
       .style("font-size", 13)
-      .text(metricConfig[currentMetric].label);
+      .text(metricConfig[currentMetric].label + " – " + currentDataset);
 
   const tooltip = d3.select("#tooltip");
 
-  // initial bars
+  // 每根柱子直接绑定整行数据 row
   const bars = g.selectAll("rect.bar")
-      .data(approaches.map(a => ({ approach: a })))
+      .data(data)
       .enter()
       .append("rect")
       .attr("class", "bar")
       .attr("x", d => x(d.approach))
       .attr("width", x.bandwidth())
-      .attr("y", innerHeight)
+      .attr("y", innerHeight)   // 先从 0 高度开始
       .attr("height", 0)
       .attr("fill", d => color(d.approach))
       .on("mousemove", (event, d) => {
-        const val = getValue(data, d.approach, currentMetric, currentDataset);
+        const val = d[metricConfig[currentMetric].key][currentDataset];
         tooltip.style("opacity", 1)
           .style("left", (event.pageX + 10) + "px")
           .style("top",  (event.pageY + 10) + "px")
@@ -184,35 +95,32 @@ function initChart(data) {
       })
       .on("mouseleave", () => tooltip.style("opacity", 0));
 
-  function getValue(data, approach, metricKey, dataset) {
-    const row = data.find(d => d.approach === approach);
-    return row[metricConfig[metricKey].key][dataset];
-  }
+  // 更新 y 轴 + 柱子高度
+  function updateChart(animate = true) {
+    const metricKey = metricConfig[currentMetric].key;
 
-  function updateChart(animate=true) {
-    const values = approaches.map(a => getValue(data, a, currentMetric, currentDataset));
+    const values = data.map(d => d[metricKey][currentDataset]);
     const maxVal = d3.max(values);
 
     y.domain([0, maxVal]).nice();
 
-    const t = animate ? svg.transition().duration(800) : svg.interrupt();
+    const t = animate ? svg.transition().duration(800) : svg;
 
     yAxisG.transition(t).call(d3.axisLeft(y));
 
-    yLabel.text(metricConfig[currentMetric].label +
-                " – " + currentDataset);
+    yLabel.text(metricConfig[currentMetric].label + " – " + currentDataset);
 
-    bars.data(approaches, d => d)
-        .transition(t)
-        .attr("x", d => x(d))
+    bars.transition(t)
+        .attr("x", d => x(d.approach))
         .attr("width", x.bandwidth())
-        .attr("y", d => y(getValue(data, d, currentMetric, currentDataset)))
-        .attr("height", d => innerHeight - y(getValue(data, d, currentMetric, currentDataset)))
-        .attr("fill", d => color(d));
+        .attr("y", d => y(d[metricKey][currentDataset]))
+        .attr("height", d => innerHeight - y(d[metricKey][currentDataset]))
+        .attr("fill", d => color(d.approach));
   }
 
-  // Summary：Best/worst per dataset
+  // 更新 summary：每个数据集的最佳 / 最差方法
   function updateSummary() {
+    const metricKey = metricConfig[currentMetric].key;
     const ul = d3.select("#summary-list");
     ul.selectAll("li").remove();
 
@@ -220,7 +128,7 @@ function initChart(data) {
       let best = null, worst = null;
 
       data.forEach(row => {
-        const val = row[metricConfig[currentMetric].key][ds];
+        const val = row[metricKey][ds];
         if (best === null || val > best.value) best = { method: row.approach, value: val };
         if (worst === null || val < worst.value) worst = { method: row.approach, value: val };
       });
@@ -231,11 +139,11 @@ function initChart(data) {
     });
   }
 
-  // initial chart
+  // 初次绘制（带进入动画）
   updateChart(true);
   updateSummary();
 
-  // --------- hover ---------
+  // --------- 绑定按钮交互 ---------
   d3.selectAll("button.metric-btn").on("click", function() {
     const m = this.getAttribute("data-metric");
     currentMetric = m;
@@ -243,8 +151,8 @@ function initChart(data) {
     d3.selectAll("button.metric-btn").classed("active", false);
     d3.select(this).classed("active", true);
 
-    updateChart(true);      // transition
-    updateSummary();        // statistical metrics
+    updateChart(true);      // 有 transition
+    updateSummary();        // 文本统计跟着变
   });
 
   d3.selectAll("button.dataset-btn").on("click", function() {
@@ -255,10 +163,7 @@ function initChart(data) {
     d3.select(this).classed("active", true);
 
     updateChart(true);
-    // summary keeps
+    // summary 一次显示四个数据集，不需要跟 dataset 按钮一起变
   });
 }
 </script>
-
-</body>
-</html>
