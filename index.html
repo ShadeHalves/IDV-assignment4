@@ -2,167 +2,263 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>IDV Assignment 4 – Grouped Bar Chart</title>
+<title>IDV Assignment 4 – Robustness Results</title>
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <style>
-    body {
-        font-family: sans-serif;
-        margin: 30px;
-        background: #fafafa;
-    }
-    h1 {
-        margin-bottom: 10px;
-    }
-    .tooltip {
-        position: absolute;
-        padding: 6px 10px;
-        background: white;
-        border: 1px solid #ccc;
-        box-shadow: 0 0 4px #0002;
-        pointer-events: none;
-        font-size: 13px;
-        border-radius: 4px;
-    }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    margin: 30px;
+    background: #fafafa;
+  }
+  h1 { margin-bottom: 6px; }
+  p  { margin-top: 0; margin-bottom: 10px; }
+  .controls { margin-bottom: 12px; }
+  .controls span { font-weight: 600; margin-right: 8px; }
+
+  button.metric-btn, button.dataset-btn {
+    border: 1px solid #ccc;
+    background: #fff;
+    padding: 4px 10px;
+    margin-right: 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  button.metric-btn.active,
+  button.dataset-btn.active {
+    background: #3f51b5;
+    color: #fff;
+    border-color: #3f51b5;
+  }
+
+  .tooltip {
+    position: absolute;
+    padding: 6px 10px;
+    background: #fff;
+    border: 1px solid #ccc;
+    box-shadow: 0 0 4px #0002;
+    pointer-events: none;
+    font-size: 13px;
+    border-radius: 4px;
+  }
+
+  #summary {
+    margin-top: 14px;
+    font-size: 13px;
+    background: #fff;
+    border-radius: 6px;
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    max-width: 880px;
+  }
+  #summary h3 {
+    margin: 0 0 4px 0;
+    font-size: 14px;
+  }
+  #summary ul {
+    margin: 4px 0 0 16px;
+    padding: 0;
+  }
 </style>
 </head>
 
 <body>
-<h1>Standard Accuracy of Different Approaches</h1>
-<p>Dataset: CIFAR-100, CIFAR-10, SVHN, MNIST (from data_1.xlsx)</p>
+<h1>Adversarial Training Results – Bar Chart with D3.js</h1>
+<p>Data option 1: groups of data (Standard Accuracy, Certified Robustness Rate, Certified Robust Accuracy).</p>
 
-<svg id="chart" width="900" height="500"></svg>
+<div class="controls">
+  <span>Metric:</span>
+  <button class="metric-btn active" data-metric="standard">Standard Accuracy</button>
+  <button class="metric-btn" data-metric="crr">Certified Robustness Rate</button>
+  <button class="metric-btn" data-metric="cra">Certified Robust Accuracy</button>
+</div>
+
+<div class="controls">
+  <span>Dataset:</span>
+  <button class="dataset-btn active" data-dataset="CIFAR-100">CIFAR-100</button>
+  <button class="dataset-btn" data-dataset="CIFAR-10">CIFAR-10</button>
+  <button class="dataset-btn" data-dataset="SVHN">SVHN</button>
+  <button class="dataset-btn" data-dataset="MNIST">MNIST</button>
+</div>
+
+<svg id="chart" width="900" height="480"></svg>
 <div id="tooltip" class="tooltip" style="opacity:0;"></div>
 
+<div id="summary">
+  <h3>Best and worst methods for each dataset</h3>
+  <ul id="summary-list"></ul>
+</div>
+
 <script>
-// ----------------------------------------------------------
-// Step 1. Load Excel file → parsed with d3.csv using sheet converter
-// ----------------------------------------------------------
-async function loadExcel() {
-    const file = "/mnt/data/data_1.xlsx";  // local path provided
-    const ab = await fetch(file).then(res => res.arrayBuffer());
-    const wb = XLSX.read(ab, { type: "array" });
-    const sheet = wb.Sheets[wb.SheetNames[0]];
-    return XLSX.utils.sheet_to_json(sheet);
-}
-
-// Load XLSX library
-const XLSX_script = document.createElement("script");
-XLSX_script.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-document.head.appendChild(XLSX_script);
-
-XLSX_script.onload = async () => {
-    const raw = await loadExcel();
-
-    // ----------------------------------------------------------
-    // Step 2. Clean & restructure data
-    // ----------------------------------------------------------
-    // Use only Standard Accuracy section
-    const datasets = ["CIFAR-100", "CIFAR-10", "SVHN", "MNIST"];
-
-    const data = raw.map(row => ({
-        Approach: row["Approach"],
-        values: datasets.map(ds => ({
-            dataset: ds,
-            value: +row[ds]
-        }))
-    }));
-
-    drawChart(data);
+// ---------------- Metric / dataset config -----------------
+const metricConfig = {
+  standard: {
+    key: "standard",
+    label: "Standard Accuracy (%)"
+  },
+  crr: {
+    key: "crr",
+    label: "Certified Robustness Rate (%)"
+  },
+  cra: {
+    key: "cra",
+    label: "Certified Robust Accuracy (%)"
+  }
 };
 
-function drawChart(data) {
+const datasets = ["CIFAR-100", "CIFAR-10", "SVHN", "MNIST"];
 
-    const svg = d3.select("#chart");
-    const width = +svg.attr("width");
-    const height = +svg.attr("height");
-    const margin = {top: 40, right: 100, bottom: 50, left: 70};
-    const innerWidth = width - margin.left - margin.right;
-    const innerHeight = height - margin.top - margin.bottom;
+let currentMetric = "standard";
+let currentDataset = "CIFAR-100";
 
-    const g = svg.append("g")
-        .attr("transform", `translate(${margin.left},${margin.top})`);
+// ---------------- Load JSON data -----------------
+d3.json("data_1.json").then(initChart);
 
-    const approaches = data.map(d => d.Approach);
-    const datasets = data[0].values.map(d => d.dataset);
+function initChart(data) {
+  const svg = d3.select("#chart");
+  const width  = +svg.attr("width");
+  const height = +svg.attr("height");
 
-    const x0 = d3.scaleBand()
-        .domain(approaches)
-        .range([0, innerWidth])
-        .padding(0.2);
+  const margin = { top: 40, right: 30, bottom: 70, left: 70 };
+  const innerWidth  = width  - margin.left - margin.right;
+  const innerHeight = height - margin.top  - margin.bottom;
 
-    const x1 = d3.scaleBand()
-        .domain(datasets)
-        .range([0, x0.bandwidth()])
-        .padding(0.05);
+  const g = svg.append("g")
+               .attr("transform", `translate(${margin.left},${margin.top})`);
 
-    const y = d3.scaleLinear()
-        .domain([0, d3.max(data, d => d3.max(d.values, v => v.value))])
-        .nice()
-        .range([innerHeight, 0]);
+  const approaches = data.map(d => d.approach);
 
-    const color = d3.scaleOrdinal()
-        .domain(datasets)
-        .range(d3.schemeTableau10);
+  // Same color per method
+  const color = d3.scaleOrdinal()
+      .domain(approaches)
+      .range(d3.schemeTableau10.concat(d3.schemeSet3)); 
 
-    const tooltip = d3.select("#tooltip");
+  const x = d3.scaleBand()
+      .domain(approaches)
+      .range([0, innerWidth])
+      .padding(0.2);
 
-    // ---------------- Bars ----------------------
-    const groups = g.selectAll(".approach")
-        .data(data)
-        .enter()
-        .append("g")
-        .attr("class", "approach")
-        .attr("transform", d => `translate(${x0(d.Approach)},0)`);
+  const y = d3.scaleLinear()
+      .range([innerHeight, 0]);
 
-    groups.selectAll("rect")
-        .data(d => d.values)
-        .enter()
-        .append("rect")
-        .attr("x", d => x1(d.dataset))
-        .attr("width", x1.bandwidth())
-        .attr("y", innerHeight)
-        .attr("height", 0)
-        .attr("fill", d => color(d.dataset))
-        .on("mousemove", (event, d) => {
-            tooltip.style("opacity",1)
-                .style("left", (event.pageX+10)+"px")
-                .style("top", (event.pageY+10)+"px")
-                .html(`<b>${d.dataset}</b><br>${d.value}`);
-        })
-        .on("mouseleave", () => tooltip.style("opacity",0))
-        .transition()            // non-interaction transition
-        .duration(800)
-        .attr("y", d => y(d.value))
-        .attr("height", d => innerHeight - y(d.value));
+  const xAxis = g.append("g")
+      .attr("transform", `translate(0,${innerHeight})`)
+      .attr("class", "x-axis")
+      .call(d3.axisBottom(x))
+      .selectAll("text")
+        .attr("transform", "rotate(-35)")
+        .style("text-anchor", "end");
 
-    // ---------------- Axes ----------------------
-    g.append("g")
-        .attr("transform", `translate(0,${innerHeight})`)
-        .call(d3.axisBottom(x0));
+  const yAxisG = g.append("g").attr("class", "y-axis");
 
-    g.append("g")
-        .call(d3.axisLeft(y));
+  const yLabel = g.append("text")
+      .attr("x", -innerHeight / 2)
+      .attr("y", -48)
+      .attr("transform", "rotate(-90)")
+      .attr("text-anchor", "middle")
+      .style("font-size", 13)
+      .text(metricConfig[currentMetric].label);
 
-    // ---------------- Legend ----------------------
-    svg.append("g")
-        .attr("transform", `translate(${width - margin.right + 10},${margin.top})`)
-        .selectAll("legend")
-        .data(datasets)
-        .enter()
-        .append("g")
-        .attr("transform", (d,i) => `translate(0,${i*22})`)
-        .each(function(d){
-            d3.select(this).append("rect")
-                .attr("width",15).attr("height",15)
-                .attr("fill", color(d));
-            d3.select(this).append("text")
-                .attr("x",22).attr("y",12)
-                .text(d);
-        });
+  const tooltip = d3.select("#tooltip");
 
+  // initial bars
+  const bars = g.selectAll("rect.bar")
+      .data(approaches.map(a => ({ approach: a })))
+      .enter()
+      .append("rect")
+      .attr("class", "bar")
+      .attr("x", d => x(d.approach))
+      .attr("width", x.bandwidth())
+      .attr("y", innerHeight)
+      .attr("height", 0)
+      .attr("fill", d => color(d.approach))
+      .on("mousemove", (event, d) => {
+        const val = getValue(data, d.approach, currentMetric, currentDataset);
+        tooltip.style("opacity", 1)
+          .style("left", (event.pageX + 10) + "px")
+          .style("top",  (event.pageY + 10) + "px")
+          .html(`<b>${d.approach}</b><br/>
+                 Metric: ${metricConfig[currentMetric].label}<br/>
+                 Dataset: ${currentDataset}<br/>
+                 Value: ${val.toFixed(2)}`);
+      })
+      .on("mouseleave", () => tooltip.style("opacity", 0));
+
+  function getValue(data, approach, metricKey, dataset) {
+    const row = data.find(d => d.approach === approach);
+    return row[metricConfig[metricKey].key][dataset];
+  }
+
+  function updateChart(animate=true) {
+    const values = approaches.map(a => getValue(data, a, currentMetric, currentDataset));
+    const maxVal = d3.max(values);
+
+    y.domain([0, maxVal]).nice();
+
+    const t = animate ? svg.transition().duration(800) : svg.interrupt();
+
+    yAxisG.transition(t).call(d3.axisLeft(y));
+
+    yLabel.text(metricConfig[currentMetric].label +
+                " – " + currentDataset);
+
+    bars.data(approaches, d => d)
+        .transition(t)
+        .attr("x", d => x(d))
+        .attr("width", x.bandwidth())
+        .attr("y", d => y(getValue(data, d, currentMetric, currentDataset)))
+        .attr("height", d => innerHeight - y(getValue(data, d, currentMetric, currentDataset)))
+        .attr("fill", d => color(d));
+  }
+
+  // Summary：Best/worst per dataset
+  function updateSummary() {
+    const ul = d3.select("#summary-list");
+    ul.selectAll("li").remove();
+
+    datasets.forEach(ds => {
+      let best = null, worst = null;
+
+      data.forEach(row => {
+        const val = row[metricConfig[currentMetric].key][ds];
+        if (best === null || val > best.value) best = { method: row.approach, value: val };
+        if (worst === null || val < worst.value) worst = { method: row.approach, value: val };
+      });
+
+      ul.append("li")
+        .text(`${ds}: best = ${best.method} (${best.value.toFixed(2)}), `
+            + `worst = ${worst.method} (${worst.value.toFixed(2)})`);
+    });
+  }
+
+  // initial chart
+  updateChart(true);
+  updateSummary();
+
+  // --------- hover ---------
+  d3.selectAll("button.metric-btn").on("click", function() {
+    const m = this.getAttribute("data-metric");
+    currentMetric = m;
+
+    d3.selectAll("button.metric-btn").classed("active", false);
+    d3.select(this).classed("active", true);
+
+    updateChart(true);      // transition
+    updateSummary();        // statistical metrics
+  });
+
+  d3.selectAll("button.dataset-btn").on("click", function() {
+    const ds = this.getAttribute("data-dataset");
+    currentDataset = ds;
+
+    d3.selectAll("button.dataset-btn").classed("active", false);
+    d3.select(this).classed("active", true);
+
+    updateChart(true);
+    // summary keeps
+  });
 }
 </script>
 
 </body>
 </html>
-
