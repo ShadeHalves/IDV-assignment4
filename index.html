@@ -1,1 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>IDV Assignment 4 – Grouped Bar Chart</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+    body {
+        font-family: sans-serif;
+        margin: 30px;
+        background: #fafafa;
+    }
+    h1 {
+        margin-bottom: 10px;
+    }
+    .tooltip {
+        position: absolute;
+        padding: 6px 10px;
+        background: white;
+        border: 1px solid #ccc;
+        box-shadow: 0 0 4px #0002;
+        pointer-events: none;
+        font-size: 13px;
+        border-radius: 4px;
+    }
+</style>
+</head>
+
+<body>
+<h1>Standard Accuracy of Different Approaches</h1>
+<p>Dataset: CIFAR-100, CIFAR-10, SVHN, MNIST (from data_1.xlsx)</p>
+
+<svg id="chart" width="900" height="500"></svg>
+<div id="tooltip" class="tooltip" style="opacity:0;"></div>
+
+<script>
+// ----------------------------------------------------------
+// Step 1. Load Excel file → parsed with d3.csv using sheet converter
+// ----------------------------------------------------------
+async function loadExcel() {
+    const file = "/mnt/data/data_1.xlsx";  // local path provided
+    const ab = await fetch(file).then(res => res.arrayBuffer());
+    const wb = XLSX.read(ab, { type: "array" });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    return XLSX.utils.sheet_to_json(sheet);
+}
+
+// Load XLSX library
+const XLSX_script = document.createElement("script");
+XLSX_script.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+document.head.appendChild(XLSX_script);
+
+XLSX_script.onload = async () => {
+    const raw = await loadExcel();
+
+    // ----------------------------------------------------------
+    // Step 2. Clean & restructure data
+    // ----------------------------------------------------------
+    // Use only Standard Accuracy section
+    const datasets = ["CIFAR-100", "CIFAR-10", "SVHN", "MNIST"];
+
+    const data = raw.map(row => ({
+        Approach: row["Approach"],
+        values: datasets.map(ds => ({
+            dataset: ds,
+            value: +row[ds]
+        }))
+    }));
+
+    drawChart(data);
+};
+
+function drawChart(data) {
+
+    const svg = d3.select("#chart");
+    const width = +svg.attr("width");
+    const height = +svg.attr("height");
+    const margin = {top: 40, right: 100, bottom: 50, left: 70};
+    const innerWidth = width - margin.left - margin.right;
+    const innerHeight = height - margin.top - margin.bottom;
+
+    const g = svg.append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+
+    const approaches = data.map(d => d.Approach);
+    const datasets = data[0].values.map(d => d.dataset);
+
+    const x0 = d3.scaleBand()
+        .domain(approaches)
+        .range([0, innerWidth])
+        .padding(0.2);
+
+    const x1 = d3.scaleBand()
+        .domain(datasets)
+        .range([0, x0.bandwidth()])
+        .padding(0.05);
+
+    const y = d3.scaleLinear()
+        .domain([0, d3.max(data, d => d3.max(d.values, v => v.value))])
+        .nice()
+        .range([innerHeight, 0]);
+
+    const color = d3.scaleOrdinal()
+        .domain(datasets)
+        .range(d3.schemeTableau10);
+
+    const tooltip = d3.select("#tooltip");
+
+    // ---------------- Bars ----------------------
+    const groups = g.selectAll(".approach")
+        .data(data)
+        .enter()
+        .append("g")
+        .attr("class", "approach")
+        .attr("transform", d => `translate(${x0(d.Approach)},0)`);
+
+    groups.selectAll("rect")
+        .data(d => d.values)
+        .enter()
+        .append("rect")
+        .attr("x", d => x1(d.dataset))
+        .attr("width", x1.bandwidth())
+        .attr("y", innerHeight)
+        .attr("height", 0)
+        .attr("fill", d => color(d.dataset))
+        .on("mousemove", (event, d) => {
+            tooltip.style("opacity",1)
+                .style("left", (event.pageX+10)+"px")
+                .style("top", (event.pageY+10)+"px")
+                .html(`<b>${d.dataset}</b><br>${d.value}`);
+        })
+        .on("mouseleave", () => tooltip.style("opacity",0))
+        .transition()            // non-interaction transition
+        .duration(800)
+        .attr("y", d => y(d.value))
+        .attr("height", d => innerHeight - y(d.value));
+
+    // ---------------- Axes ----------------------
+    g.append("g")
+        .attr("transform", `translate(0,${innerHeight})`)
+        .call(d3.axisBottom(x0));
+
+    g.append("g")
+        .call(d3.axisLeft(y));
+
+    // ---------------- Legend ----------------------
+    svg.append("g")
+        .attr("transform", `translate(${width - margin.right + 10},${margin.top})`)
+        .selectAll("legend")
+        .data(datasets)
+        .enter()
+        .append("g")
+        .attr("transform", (d,i) => `translate(0,${i*22})`)
+        .each(function(d){
+            d3.select(this).append("rect")
+                .attr("width",15).attr("height",15)
+                .attr("fill", color(d));
+            d3.select(this).append("text")
+                .attr("x",22).attr("y",12)
+                .text(d);
+        });
+
+}
+</script>
+
+</body>
+</html>
 
